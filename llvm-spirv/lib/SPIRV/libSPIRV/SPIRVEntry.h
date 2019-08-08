@@ -322,6 +322,7 @@ public:
     assert(0 && "not implemented");
     return false;
   }
+  virtual bool isImplemented() const { return true; }
 
   void addDecorate(SPIRVDecorate *);
   void addDecorate(Decoration Kind);
@@ -442,6 +443,20 @@ public:
     SPIRVEntry::WordCount = 1;
     validate();
   }
+
+protected:
+  _SPIRV_DEF_ENCDEC0
+  void validate() const override { assert(isValidId(SPIRVEntry::OpCode)); }
+};
+
+template <Op TheOpCode>
+class SPIRVEntryUnimplemented : public SPIRVEntryNoId<TheOpCode> {
+public:
+  SPIRVEntryUnimplemented() {
+    SPIRVEntry::WordCount = 1;
+    validate();
+  }
+  bool isImplemented() const override { return false; }
 
 protected:
   _SPIRV_DEF_ENCDEC0
@@ -742,7 +757,7 @@ template <spv::Op OC> bool isa(SPIRVEntry *E) {
 // to be implemented.
 // Each time a new class is implemented, remove the corresponding typedef.
 // This is also an indication of how much work is left.
-#define _SPIRV_OP(x) typedef SPIRVEntryOpCodeOnly<Op##x> SPIRV##x;
+#define _SPIRV_OP(x) typedef SPIRVEntryUnimplemented<Op##x> SPIRV##x;
 _SPIRV_OP(Nop)
 _SPIRV_OP(SourceContinued)
 _SPIRV_OP(TypeMatrix)
@@ -778,8 +793,6 @@ _SPIRV_OP(UMulExtended)
 _SPIRV_OP(BitFieldInsert)
 _SPIRV_OP(BitFieldSExtract)
 _SPIRV_OP(BitFieldUExtract)
-_SPIRV_OP(BitReverse)
-_SPIRV_OP(BitCount)
 _SPIRV_OP(DPdx)
 _SPIRV_OP(DPdy)
 _SPIRV_OP(Fwidth)

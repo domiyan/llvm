@@ -73,24 +73,13 @@ ToolChain::ToolChain(const Driver &D, const llvm::Triple &T,
                      const ArgList &Args)
     : D(D), Triple(T), Args(Args), CachedRTTIArg(GetRTTIArgument(Args)),
       CachedRTTIMode(CalculateRTTIMode(Args, Triple, CachedRTTIArg)) {
-  SmallString<128> P;
-
   if (D.CCCIsCXX()) {
-    P.assign(D.Dir);
-    llvm::sys::path::append(P, "..", "lib", D.getTargetTriple(), "c++");
-    if (getVFS().exists(P))
-      getLibraryPaths().push_back(P.str());
+    if (auto CXXStdlibPath = getCXXStdlibPath())
+      getFilePaths().push_back(*CXXStdlibPath);
   }
 
-  P.assign(D.ResourceDir);
-  llvm::sys::path::append(P, D.getTargetTriple(), "lib");
-  if (getVFS().exists(P))
-    getLibraryPaths().push_back(P.str());
-
-  P.assign(D.ResourceDir);
-  llvm::sys::path::append(P, Triple.str(), "lib");
-  if (getVFS().exists(P))
-    getLibraryPaths().push_back(P.str());
+  if (auto RuntimePath = getRuntimePath())
+    getLibraryPaths().push_back(*RuntimePath);
 
   std::string CandidateLibPath = getArchSpecificLibPath();
   if (getVFS().exists(CandidateLibPath))
@@ -312,6 +301,12 @@ Tool *ToolChain::getSPIRVTranslator() const {
   return SPIRVTranslator.get();
 }
 
+Tool *ToolChain::getSPIRCheck() const {
+  if (!SPIRCheck)
+    SPIRCheck.reset(new tools::SPIRCheck(*this));
+  return SPIRCheck.get();
+}
+
 Tool *ToolChain::getBackendCompiler() const {
   if (!BackendCompiler)
     BackendCompiler.reset(buildBackendCompiler());
@@ -353,6 +348,9 @@ Tool *ToolChain::getTool(Action::ActionClass AC) const {
 
   case Action::SPIRVTranslatorJobClass:
     return getSPIRVTranslator();
+
+  case Action::SPIRCheckJobClass:
+    return getSPIRCheck();
 
   case Action::BackendCompileJobClass:
     return getBackendCompiler();
@@ -447,6 +445,43 @@ const char *ToolChain::getCompilerRTArgString(const llvm::opt::ArgList &Args,
   return Args.MakeArgString(getCompilerRT(Args, Component, Type));
 }
 
+
+Optional<std::string> ToolChain::getRuntimePath() const {
+  SmallString<128> P;
+
+  // First try the triple passed to driver as --target=<triple>.
+  P.assign(D.ResourceDir);
+  llvm::sys::path::append(P, "lib", D.getTargetTriple());
+  if (getVFS().exists(P))
+    return llvm::Optional<std::string>(P.str());
+
+  // Second try the normalized triple.
+  P.assign(D.ResourceDir);
+  llvm::sys::path::append(P, "lib", Triple.str());
+  if (getVFS().exists(P))
+    return llvm::Optional<std::string>(P.str());
+
+  return None;
+}
+
+Optional<std::string> ToolChain::getCXXStdlibPath() const {
+  SmallString<128> P;
+
+  // First try the triple passed to driver as --target=<triple>.
+  P.assign(D.Dir);
+  llvm::sys::path::append(P, "..", "lib", D.getTargetTriple(), "c++");
+  if (getVFS().exists(P))
+    return llvm::Optional<std::string>(P.str());
+
+  // Second try the normalized triple.
+  P.assign(D.Dir);
+  llvm::sys::path::append(P, "..", "lib", Triple.str(), "c++");
+  if (getVFS().exists(P))
+    return llvm::Optional<std::string>(P.str());
+
+  return None;
+}
+
 std::string ToolChain::getArchSpecificLibPath() const {
   SmallString<128> Path(getDriver().ResourceDir);
   llvm::sys::path::append(Path, "lib", getOSLibName(),
@@ -455,6 +490,9 @@ std::string ToolChain::getArchSpecificLibPath() const {
 }
 
 bool ToolChain::needsProfileRT(const ArgList &Args) {
+  if (Args.hasArg(options::OPT_noprofilelib))
+    return false;
+
   if (needsGCovInstrumentation(Args) ||
       Args.hasArg(options::OPT_fprofile_generate) ||
       Args.hasArg(options::OPT_fprofile_generate_EQ) ||
@@ -859,10 +897,6 @@ void ToolChain::AddCXXStdlibLibArgs(const ArgList &Args,
 
 void ToolChain::AddFilePathLibArgs(const ArgList &Args,
                                    ArgStringList &CmdArgs) const {
-  for (const auto &LibPath : getLibraryPaths())
-    if(LibPath.length() > 0)
-      CmdArgs.push_back(Args.MakeArgString(StringRef("-L") + LibPath));
-
   for (const auto &LibPath : getFilePaths())
     if(LibPath.length() > 0)
       CmdArgs.push_back(Args.MakeArgString(StringRef("-L") + LibPath));
@@ -905,6 +939,7 @@ SanitizerMask ToolChain::getSupportedSanitizers() const {
                        ~SanitizerKind::Function) |
                       (SanitizerKind::CFI & ~SanitizerKind::CFIICall) |
                       SanitizerKind::CFICastStrict |
+                      SanitizerKind::FloatDivideByZero |
                       SanitizerKind::UnsignedIntegerOverflow |
                       SanitizerKind::ImplicitConversion |
                       SanitizerKind::Nullability | SanitizerKind::LocalBounds;

@@ -336,14 +336,13 @@ struct sub_group {
   /* --- synchronization functions --- */
   void barrier(access::fence_space accessSpace =
                    access::fence_space::global_and_local) const {
-    uint32_t flags = detail::getSPIRVMemorySemanticsMask(
-        accessSpace, __spv::MemorySemanticsMask::SubgroupMemory);
-    __spirv_ControlBarrier(__spv::Scope::Subgroup, __spv::Scope::Workgroup,
+    uint32_t flags = detail::getSPIRVMemorySemanticsMask(accessSpace);
+    __spirv_ControlBarrier(__spv::Scope::Subgroup, __spv::Scope::Subgroup,
                            flags);
   }
 
 protected:
-  template <int dimensions> friend struct cl::sycl::nd_item;
+  template <int dimensions> friend class cl::sycl::nd_item;
   sub_group() = default;
 };
 } // namespace intel

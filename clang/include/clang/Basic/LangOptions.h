@@ -109,7 +109,13 @@ public:
     MSVC2013 = 1800,
     MSVC2015 = 1900,
     MSVC2017 = 1910,
-    MSVC2017_5 = 1912
+    MSVC2017_5 = 1912,
+    MSVC2017_7 = 1914,
+  };
+
+  enum class SYCLVersionList {
+    sycl_1_2_1,
+    undefined
   };
 
   /// Clang versions with different platform ABI conformance.

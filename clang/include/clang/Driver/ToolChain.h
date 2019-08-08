@@ -139,6 +139,7 @@ private:
   mutable std::unique_ptr<Tool> OffloadBundler;
   mutable std::unique_ptr<Tool> OffloadWrapper;
   mutable std::unique_ptr<Tool> SPIRVTranslator;
+  mutable std::unique_ptr<Tool> SPIRCheck;
   mutable std::unique_ptr<Tool> BackendCompiler;
 
   Tool *getClang() const;
@@ -148,6 +149,7 @@ private:
   Tool *getOffloadBundler() const;
   Tool *getOffloadWrapper() const;
   Tool *getSPIRVTranslator() const;
+  Tool *getSPIRCheck() const;
   Tool *getBackendCompiler() const;
 
   mutable std::unique_ptr<SanitizerArgs> SanitizerArguments;
@@ -397,6 +399,12 @@ public:
   const char *
   getCompilerRTArgString(const llvm::opt::ArgList &Args, StringRef Component,
                          FileType Type = ToolChain::FT_Static) const;
+
+  // Returns target specific runtime path if it exists.
+  virtual Optional<std::string> getRuntimePath() const;
+
+  // Returns target specific C++ library path if it exists.
+  virtual Optional<std::string> getCXXStdlibPath() const;
 
   // Returns <ResourceDir>/lib/<OSName>/<arch>.  This is used by runtimes (such
   // as OpenMP) to find arch-specific libraries.

@@ -22,10 +22,10 @@ namespace cl {
 namespace sycl {
 class context;
 class event;
-template <int dimensions, bool with_offset> struct item;
+template <int dimensions, bool with_offset> class item;
 template <int dimensions> class group;
 template <int dimensions> class range;
-template <int dimensions> struct id;
+template <int dimensions> class id;
 template <int dimensions> class nd_item;
 enum class memory_order;
 template <int dimensions> class h_item;
@@ -40,13 +40,23 @@ getOrWaitEvents(std::vector<cl::sycl::event> DepEvents,
 
 void waitEvents(std::vector<cl::sycl::event> DepEvents);
 
-struct Builder {
+class Builder {
+public:
   Builder() = delete;
+  template <int dimensions>
+  static group<dimensions>
+  createGroup(const cl::sycl::range<dimensions> &G,
+              const cl::sycl::range<dimensions> &L,
+              const cl::sycl::range<dimensions> &GroupRange,
+              const cl::sycl::id<dimensions> &I) {
+    return cl::sycl::group<dimensions>(G, L, GroupRange, I);
+  }
+
   template <int dimensions>
   static group<dimensions> createGroup(const cl::sycl::range<dimensions> &G,
                                        const cl::sycl::range<dimensions> &L,
                                        const cl::sycl::id<dimensions> &I) {
-    return cl::sycl::group<dimensions>(G, L, I);
+    return cl::sycl::group<dimensions>(G, L, G / L, I);
   }
 
   template <int dimensions, bool with_offset>

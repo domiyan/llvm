@@ -873,6 +873,29 @@ protected:
   std::vector<SPIRVId> Pairs;
 };
 
+class SPIRVFPGARegINTELInstBase : public SPIRVInstTemplateBase {
+public:
+  SPIRVCapVec getRequiredCapability() const override {
+    return getVec(CapabilityFPGARegINTEL);
+  }
+
+  SPIRVExtSet getRequiredExtensions() const override {
+    return getSet(SPV_INTEL_fpga_reg);
+  }
+
+protected:
+  void validate() const override {
+    SPIRVInstruction::validate();
+
+    assert(OpCode == OpFPGARegINTEL &&
+           "Invalid op code for FPGARegINTEL instruction");
+    assert(getType() == getValueType(Ops[0]) && "Inconsistent type");
+  }
+};
+
+typedef SPIRVInstTemplate<SPIRVFPGARegINTELInstBase, OpFPGARegINTEL, true, 4>
+    SPIRVFPGARegINTEL;
+
 class SPIRVCompare : public SPIRVInstTemplateBase {
 protected:
   void validate() const override {
@@ -1285,6 +1308,8 @@ _SPIRV_OP(IsNormal)
 _SPIRV_OP(SignBitSet)
 _SPIRV_OP(Any)
 _SPIRV_OP(All)
+_SPIRV_OP(BitCount)
+_SPIRV_OP(BitReverse)
 #undef _SPIRV_OP
 
 class SPIRVAccessChainBase : public SPIRVInstTemplateBase {
@@ -1314,6 +1339,52 @@ typedef SPIRVAccessChainGeneric<OpInBoundsAccessChain, 4>
 typedef SPIRVAccessChainGeneric<OpPtrAccessChain, 5> SPIRVPtrAccessChain;
 typedef SPIRVAccessChainGeneric<OpInBoundsPtrAccessChain, 5>
     SPIRVInBoundsPtrAccessChain;
+
+class SPIRVLoopControlINTEL : public SPIRVInstruction {
+public:
+  static const Op OC = OpLoopControlINTEL;
+  static const SPIRVWord FixedWordCount = 2;
+
+  SPIRVLoopControlINTEL(SPIRVWord TheLoopControl,
+                        std::vector<SPIRVWord> TheLoopControlParameters,
+                        SPIRVBasicBlock *BB)
+      : SPIRVInstruction(FixedWordCount + TheLoopControlParameters.size(), OC,
+                         BB),
+        LoopControl(TheLoopControl),
+        LoopControlParameters(TheLoopControlParameters) {
+    validate();
+    assert(BB && "Invalid BB");
+  }
+
+  SPIRVLoopControlINTEL() : SPIRVInstruction(OC), LoopControl(SPIRVWORD_MAX) {
+    setHasNoId();
+    setHasNoType();
+  }
+
+  SPIRVWord getLoopControl() { return LoopControl; }
+
+  std::vector<SPIRVWord> getLoopControlParameters() {
+    return LoopControlParameters;
+  }
+
+  SPIRVCapVec getRequiredCapability() const override {
+    return getVec(CapabilityUnstructuredLoopControlsINTEL);
+  }
+
+  SPIRVExtSet getRequiredExtensions() const override {
+    return getSet(SPV_INTEL_unstructured_loop_controls);
+  }
+
+  void setWordCount(SPIRVWord TheWordCount) override {
+    SPIRVEntry::setWordCount(TheWordCount);
+    LoopControlParameters.resize(TheWordCount - FixedWordCount);
+  }
+  _SPIRV_DEF_ENCDEC2(LoopControl, LoopControlParameters)
+
+protected:
+  SPIRVWord LoopControl;
+  std::vector<SPIRVWord> LoopControlParameters;
+};
 
 template <Op OC, SPIRVWord FixedWordCount>
 class SPIRVFunctionCallGeneric : public SPIRVInstruction {
@@ -1517,11 +1588,12 @@ protected:
     case OpTypeVector:
       assert(getConstituents().size() > 1 &&
              "There must be at least two Constituent operands in vector");
+      break;
     case OpTypeArray:
     case OpTypeStruct:
       break;
     default:
-      static_assert("Invalid type", "");
+      assert(false && "Invalid type");
     }
   }
   std::vector<SPIRVId> Constituents;
@@ -2090,6 +2162,24 @@ _SPIRV_OP(GroupReserveReadPipePackets, true, 8)
 _SPIRV_OP(GroupReserveWritePipePackets, true, 8)
 _SPIRV_OP(GroupCommitReadPipe, false, 6)
 _SPIRV_OP(GroupCommitWritePipe, false, 6)
+#undef _SPIRV_OP
+
+class SPIRVBlockingPipesIntelInst : public SPIRVInstTemplateBase {
+protected:
+  SPIRVCapVec getRequiredCapability() const override {
+    return getVec(CapabilityBlockingPipesINTEL);
+  }
+
+  SPIRVExtSet getRequiredExtensions() const override {
+    return getSet(SPV_INTEL_blocking_pipes);
+  }
+};
+
+#define _SPIRV_OP(x, ...)                                                      \
+  typedef SPIRVInstTemplate<SPIRVBlockingPipesIntelInst, Op##x, __VA_ARGS__>   \
+      SPIRV##x;
+_SPIRV_OP(ReadPipeBlockingINTEL, false, 5)
+_SPIRV_OP(WritePipeBlockingINTEL, false, 5)
 #undef _SPIRV_OP
 
 class SPIRVAtomicInstBase : public SPIRVInstTemplateBase {

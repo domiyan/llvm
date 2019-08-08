@@ -10,6 +10,7 @@
 //
 #pragma once
 
+#include <CL/sycl/detail/os_util.hpp>
 #include <CL/sycl/detail/pi.h>
 #include <CL/sycl/detail/common.hpp>
 
@@ -28,20 +29,30 @@ namespace pi {
   // Check for manually selected BE at run-time.
   bool piUseBackend(PiBackend Backend);
 
-  using PiResult              = ::pi_result;
-  using PiPlatform            = ::pi_platform;
-  using PiDevice              = ::pi_device;
-  using PiDeviceType          = ::pi_device_type;
-  using PiDeviceInfo          = ::pi_device_info;
-  using PiDeviceBinaryType    = ::pi_device_binary_type;
-  using PiContext             = ::pi_context;
-  using PiProgram             = ::pi_program;
-  using PiKernel              = ::pi_kernel;
-  using PiQueue               = ::pi_queue;
-  using PiMem                 = ::pi_mem;
-  using PiMemFlags            = ::pi_mem_flags;
-  using PiEvent               = ::pi_event;
-  using PiSampler             = ::pi_sampler;
+  using PiResult               = ::pi_result;
+  using PiPlatform             = ::pi_platform;
+  using PiDevice               = ::pi_device;
+  using PiDeviceType           = ::pi_device_type;
+  using PiDeviceInfo           = ::pi_device_info;
+  using PiDeviceBinaryType     = ::pi_device_binary_type;
+  using PiContext              = ::pi_context;
+  using PiProgram              = ::pi_program;
+  using PiKernel               = ::pi_kernel;
+  using PiQueue                = ::pi_queue;
+  using PiQueueProperties      = ::pi_queue_properties;
+  using PiMem                  = ::pi_mem;
+  using PiMemFlags             = ::pi_mem_flags;
+  using PiEvent                = ::pi_event;
+  using PiSampler              = ::pi_sampler;
+  using PiMemImageFormat       = ::pi_image_format;
+  using PiMemImageDesc         = ::pi_image_desc;
+  using PiMemImageInfo         = ::pi_image_info;
+  using PiMemObjectType        = ::pi_mem_type;
+  using PiMemImageChannelOrder = ::pi_image_channel_order;
+  using PiMemImageChannelType  = ::pi_image_channel_type;
+
+  // Get a string representing a _pi_platform_info enum
+  std::string platformInfoToString(pi_platform_info info);
 
   // Report error and no return (keeps compiler happy about no return statements).
   [[noreturn]] void piDie(const char *Message);
@@ -52,7 +63,7 @@ namespace pi {
   To pi_cast(From value);
 
   // Forward declarations of the PI dispatch entries.
-  #define _PI_API(api) extern decltype(::api) * api;
+  #define _PI_API(api) __SYCL_EXPORTED extern decltype(::api) * api;
   #include <CL/sycl/detail/pi.def>
 
   // Performs PI one-time initialization.

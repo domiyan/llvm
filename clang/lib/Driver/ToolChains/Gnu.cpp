@@ -382,6 +382,8 @@ void tools::gnutools::Linker::ConstructJob(Compilation &C, const JobAction &JA,
     CmdArgs.push_back("-static");
     CmdArgs.push_back("-pie");
     CmdArgs.push_back("--no-dynamic-linker");
+    CmdArgs.push_back("-z");
+    CmdArgs.push_back("text");
   }
 
   if (ToolChain.isNoExecStackDefault()) {
@@ -585,8 +587,13 @@ void tools::gnutools::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 
       AddRunTimeLibs(ToolChain, D, CmdArgs, Args);
 
-      if (Args.hasArg(options::OPT_fsycl))
+      if (Args.hasArg(options::OPT_fsycl)) {
         CmdArgs.push_back("-lsycl");
+        // Use of -fintelfpga implies -lOpenCL.
+        // FIXME: Adjust to use plugin interface when available.
+        if (Args.hasArg(options::OPT_fintelfpga))
+          CmdArgs.push_back("-lOpenCL");
+      }
 
       if (WantPthread && !isAndroid)
         CmdArgs.push_back("-lpthread");
@@ -953,10 +960,6 @@ static bool isMips16(const ArgList &Args) {
 static bool isMicroMips(const ArgList &Args) {
   Arg *A = Args.getLastArg(options::OPT_mmicromips, options::OPT_mno_micromips);
   return A && A->getOption().matches(options::OPT_mmicromips);
-}
-
-static bool isRISCV(llvm::Triple::ArchType Arch) {
-  return Arch == llvm::Triple::riscv32 || Arch == llvm::Triple::riscv64;
 }
 
 static bool isMSP430(llvm::Triple::ArchType Arch) {
@@ -2334,7 +2337,7 @@ bool Generic_GCC::GCCInstallationDetector::ScanGCCForMultilibs(
   } else if (TargetTriple.isMIPS()) {
     if (!findMIPSMultilibs(D, TargetTriple, Path, Args, Detected))
       return false;
-  } else if (isRISCV(TargetArch)) {
+  } else if (TargetTriple.isRISCV()) {
     findRISCVMultilibs(D, TargetTriple, Path, Args, Detected);
   } else if (isMSP430(TargetArch)) {
     findMSP430Multilibs(D, TargetTriple, Path, Args, Detected);

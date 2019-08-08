@@ -24,7 +24,7 @@
 namespace cl {
 namespace sycl {
 namespace detail {
-struct Builder;
+class Builder;
 
 // Implements a barrier accross work items within a work group.
 static inline void workGroupBarrier() {
@@ -39,6 +39,47 @@ static inline void workGroupBarrier() {
 }
 
 } // namespace detail
+
+// SYCL 1.2.1rev5, section "4.8.5.3 Parallel For hierarchical invoke":
+// Quote:
+//   ... To guarantee use of private per-work-item memory, the private_memory
+//   class can be used to wrap the data. This class very simply constructs
+//   private data for a given group across the entire group.The id of the
+//   current work-item is passed to any access to grab the correct data.
+template <typename T, int Dimensions = 1> class private_memory {
+public:
+  // Construct based directly off the number of work-items
+  private_memory(const group<Dimensions> &G) {
+#ifndef __SYCL_DEVICE_ONLY__
+    // serial host => one instance per work-group - allocate space for each WI
+    // in the group:
+    Val.reset(new T[G.get_local_range().size()]);
+#endif // __SYCL_DEVICE_ONLY__
+  }
+
+  // Access the instance for the current work-item
+  T &operator()(const h_item<Dimensions> &Id) {
+#ifndef __SYCL_DEVICE_ONLY__
+    // Calculate the linear index of current WI and return reference to the
+    // corresponding spot in the value array:
+    size_t Ind = Id.get_physical_local().get_linear_id();
+    return Val.get()[Ind];
+#else
+    return Val;
+#endif // __SYCL_DEVICE_ONLY__
+  }
+
+private:
+#ifdef __SYCL_DEVICE_ONLY__
+  // On SYCL device private_memory<T> instance is created per physical WI, so
+  // there is 1:1 correspondence betwen this class instances and per-WI memory.
+  T Val;
+#else
+  // On serial host there is one private_memory<T> instance per work group, so
+  // it must have space to hold separate value per WI in the group.
+  std::unique_ptr<T> Val;
+#endif // #ifdef __SYCL_DEVICE_ONLY__
+};
 
 template <int dimensions = 1> class group {
 public:
@@ -58,29 +99,38 @@ public:
 
   size_t get_local_range(int dimension) const { return localRange[dimension]; }
 
-  range<dimensions> get_group_range() const { return localRange; }
+  range<dimensions> get_group_range() const { return groupRange; }
 
-  size_t get_group_range(int dimension) const { return localRange[dimension]; }
+  size_t get_group_range(int dimension) const {
+    return get_group_range()[dimension];
+  }
 
   size_t operator[](int dimension) const { return index[dimension]; }
 
   template <int dims = dimensions>
   typename std::enable_if<(dims == 1), size_t>::type get_linear_id() const {
-    range<dimensions> groupNum = globalRange / localRange;
     return index[0];
   }
 
   template <int dims = dimensions>
   typename std::enable_if<(dims == 2), size_t>::type get_linear_id() const {
-    range<dimensions> groupNum = globalRange / localRange;
-    return index[1] * groupNum[0] + index[0];
+    return index[0] * groupRange[1] + index[1];
   }
 
+  // SYCL specification 1.2.1rev5, section 4.7.6.5 "Buffer accessor":
+  //    Whenever a multi-dimensional index is passed to a SYCL accessor the
+  //    linear index is calculated based on the index {id1, id2, id3} provided
+  //    and the range of the SYCL accessor {r1, r2, r3} according to row-major
+  //    ordering as follows:
+  //      id3 + (id2 · r3) + (id1 · r3 · r2)            (4.3)
+  // section 4.8.1.8 "group class":
+  //    size_t get_linear_id()const
+  //    Get a linearized version of the work-group id. Calculating a linear
+  //    work-group id from a multi-dimensional index follows the equation 4.3.
   template <int dims = dimensions>
   typename std::enable_if<(dims == 3), size_t>::type get_linear_id() const {
-    range<dimensions> groupNum = globalRange / localRange;
-    return (index[2] * groupNum[1] * groupNum[0]) + (index[1] * groupNum[0]) +
-           index[0];
+    return (index[0] * groupRange[1] * groupRange[2]) +
+           (index[1] * groupRange[2]) + index[2];
   }
 
   template <typename WorkItemFunctionT>
@@ -89,15 +139,14 @@ public:
     // compilers are expected to optimize when possible
     detail::workGroupBarrier();
 #ifdef __SYCL_DEVICE_ONLY__
-    range<dimensions> GlobalSize;
-    range<dimensions> LocalSize;
-    id<dimensions> GlobalId;
-    id<dimensions> LocalId;
-
-    __spirv::initGlobalSize<dimensions>(GlobalSize);
-    __spirv::initWorkgroupSize<dimensions>(LocalSize);
-    __spirv::initGlobalInvocationId<dimensions>(GlobalId);
-    __spirv::initLocalInvocationId<dimensions>(LocalId);
+    range<dimensions> GlobalSize{
+        __spirv::initGlobalSize<dimensions, range<dimensions>>()};
+    range<dimensions> LocalSize{
+        __spirv::initWorkgroupSize<dimensions, range<dimensions>>()};
+    id<dimensions> GlobalId{
+        __spirv::initGlobalInvocationId<dimensions, id<dimensions>>()};
+    id<dimensions> LocalId{
+        __spirv::initLocalInvocationId<dimensions, id<dimensions>>()};
 
     // no 'iterate' in the device code variant, because
     // (1) this code is already invoked by each work item as a part of the
@@ -140,15 +189,14 @@ public:
                               WorkItemFunctionT Func) const {
     detail::workGroupBarrier();
 #ifdef __SYCL_DEVICE_ONLY__
-    range<dimensions> GlobalSize;
-    range<dimensions> LocalSize;
-    id<dimensions> GlobalId;
-    id<dimensions> LocalId;
-
-    __spirv::initGlobalSize<dimensions>(GlobalSize);
-    __spirv::initWorkgroupSize<dimensions>(LocalSize);
-    __spirv::initGlobalInvocationId<dimensions>(GlobalId);
-    __spirv::initLocalInvocationId<dimensions>(LocalId);
+    range<dimensions> GlobalSize{
+        __spirv::initGlobalSize<dimensions, range<dimensions>>()};
+    range<dimensions> LocalSize{
+        __spirv::initWorkgroupSize<dimensions, range<dimensions>>()};
+    id<dimensions> GlobalId{
+        __spirv::initGlobalInvocationId<dimensions, id<dimensions>>()};
+    id<dimensions> LocalId{
+        __spirv::initLocalInvocationId<dimensions, id<dimensions>>()};
 
     item<dimensions, false> GlobalItem =
         detail::Builder::createItem<dimensions, false>(GlobalSize, GlobalId);
@@ -264,8 +312,11 @@ public:
   }
 
   bool operator==(const group<dimensions> &rhs) const {
-    return (rhs.globalRange == this->globalRange) &&
-           (rhs.localRange == this->localRange) && (rhs.index == this->index);
+    bool Result = (rhs.globalRange == globalRange) &&
+                  (rhs.localRange == localRange) && (rhs.index == index);
+    __SYCL_ASSERT(rhs.groupRange == groupRange &&
+                  "inconsistent group class fields");
+    return Result;
   }
 
   bool operator!=(const group<dimensions> &rhs) const {
@@ -275,6 +326,7 @@ public:
 private:
   range<dimensions> globalRange;
   range<dimensions> localRange;
+  range<dimensions> groupRange;
   id<dimensions> index;
 
   void waitForHelper() const {}
@@ -290,10 +342,16 @@ private:
   }
 
 protected:
-  friend struct detail::Builder;
+  friend class detail::Builder;
   group(const range<dimensions> &G, const range<dimensions> &L,
-        const id<dimensions> &I)
-      : globalRange(G), localRange(L), index(I) {}
+        const range<dimensions> GroupRange, const id<dimensions> &I)
+      : globalRange(G), localRange(L), groupRange(GroupRange), index(I) {
+    // Make sure local range divides global without remainder:
+    __SYCL_ASSERT(((G % L).size() == 0) &&
+                  "global range is not multiple of local");
+    __SYCL_ASSERT((((G / L) - GroupRange).size() == 0) &&
+                  "inconsistent group constructor arguments");
+  }
 };
 
 } // namespace sycl

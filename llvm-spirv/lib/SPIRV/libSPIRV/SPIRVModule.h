@@ -344,6 +344,10 @@ public:
   virtual SPIRVInstruction *addLoopMergeInst(
       SPIRVId MergeBlock, SPIRVId ContinueTarget, SPIRVWord LoopControl,
       std::vector<SPIRVWord> LoopControlParameters, SPIRVBasicBlock *BB) = 0;
+  virtual SPIRVInstruction *
+  addLoopControlINTELInst(SPIRVWord LoopControl,
+                          std::vector<SPIRVWord> LoopControlParameters,
+                          SPIRVBasicBlock *BB) = 0;
   virtual SPIRVInstruction *addStoreInst(SPIRVValue *, SPIRVValue *,
                                          const std::vector<SPIRVWord> &,
                                          SPIRVBasicBlock *) = 0;
@@ -375,6 +379,11 @@ public:
                                                        SPIRVValue *,
                                                        SPIRVValue *,
                                                        SPIRVBasicBlock *) = 0;
+  virtual SPIRVInstruction *addFPGARegINTELInst(SPIRVType *, SPIRVValue *,
+                                                SPIRVBasicBlock *) = 0;
+  virtual SPIRVInstruction *addSampledImageInst(SPIRVType *, SPIRVValue *,
+                                                SPIRVValue *,
+                                                SPIRVBasicBlock *) = 0;
   virtual SPIRVId getExtInstSetId(SPIRVExtInstSetKind Kind) const = 0;
 
   // I/O functions

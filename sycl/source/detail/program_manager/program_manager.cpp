@@ -78,17 +78,17 @@ static RT::PiProgram createSpirvProgram(const RT::PiContext Context,
                                         const unsigned char *Data,
                                         size_t DataLen) {
   RT::PiResult Err = PI_SUCCESS;
-  RT::PiProgram Program;
-  PI_CALL((Program = pi::pi_cast<pi_program>(
-               pi::piProgramCreate(pi::pi_cast<pi_context>(Context), Data, DataLen,
-                                   pi::pi_cast<pi_result *>(&Err))),
-           Err));
+  RT::PiProgram Program = nullptr;
+  PI_CALL(pi::piProgramCreate(Context, Data, DataLen, &Program));
   return Program;
 }
 
 RT::PiProgram ProgramManager::getBuiltOpenCLProgram(OSModuleHandle M,
                                                     const context &Context) {
-  RT::PiProgram &Program = m_CachedSpirvPrograms[std::make_pair(Context, M)];
+  std::shared_ptr<context_impl> Ctx = getSyclObjImpl(Context);
+  std::map<OSModuleHandle, RT::PiProgram> &CachedPrograms =
+      Ctx->getCachedPrograms();
+  RT::PiProgram &Program = CachedPrograms[M];
   if (!Program) {
     DeviceImage *Img = nullptr;
     Program = loadProgram(M, Context, &Img);
@@ -105,7 +105,10 @@ RT::PiKernel ProgramManager::getOrCreateKernel(OSModuleHandle M,
               << getRawSyclObjImpl(Context) << ", " << KernelName << ")\n";
   }
   RT::PiProgram Program = getBuiltOpenCLProgram(M, Context);
-  std::map<string_class, RT::PiKernel> &KernelsCache = m_CachedKernels[Program];
+  std::shared_ptr<context_impl> Ctx = getSyclObjImpl(Context);
+  std::map<RT::PiProgram, std::map<string_class, RT::PiKernel>> &CachedKernels =
+      Ctx->getCachedKernels();
+  std::map<string_class, RT::PiKernel> &KernelsCache = CachedKernels[Program];
   RT::PiKernel &Kernel = KernelsCache[KernelName];
   if (!Kernel) {
     RT::PiResult Err = PI_SUCCESS;
@@ -171,15 +174,6 @@ void ProgramManager::build(RT::PiProgram &Program, const string_class &Options,
   throw compile_program_error(Log.c_str());
 }
 
-bool ProgramManager::ContextAndModuleLess::
-operator()(const std::pair<context, OSModuleHandle> &LHS,
-           const std::pair<context, OSModuleHandle> &RHS) const {
-  if (LHS.first != RHS.first)
-    return getRawSyclObjImpl(LHS.first) < getRawSyclObjImpl(RHS.first);
-  return reinterpret_cast<intptr_t>(LHS.second) <
-         reinterpret_cast<intptr_t>(RHS.second);
-}
-
 void ProgramManager::addImages(pi_device_binaries DeviceBinary) {
   std::lock_guard<std::mutex> Guard(Sync::getGlobalLock());
 
@@ -223,6 +217,30 @@ struct ImageDeleter {
     delete I;
   }
 };
+
+static bool is_device_binary_type_supported(const context &C,
+                                  RT::PiDeviceBinaryType Format) {
+  // All formats except PI_DEVICE_BINARY_TYPE_SPIRV are supported.
+  if (Format != PI_DEVICE_BINARY_TYPE_SPIRV)
+    return true;
+
+  // OpenCL 2.1 and greater require clCreateProgramWithIL
+  if (pi::piUseBackend(pi::SYCL_BE_PI_OPENCL) &&
+      C.get_platform().get_info<info::platform::version>() >= "2.1")
+    return true;
+
+  // Otherwise we need cl_khr_program_il extension to be present
+  // and we can call clCreateProgramWithILKHR using the extension
+  for (const auto &D : C.get_devices()) {
+    auto Extensions = D.get_info<info::device::extensions>();
+    if (std::find(Extensions.begin(), Extensions.end(),
+                  string_class("cl_khr_program_il")) != Extensions.end())
+      return true;
+  }
+
+  // This device binary type is not supported.
+  return false;
+}
 
 RT::PiProgram ProgramManager::loadProgram(OSModuleHandle M,
                                           const context &Context,
@@ -369,6 +387,8 @@ RT::PiProgram ProgramManager::loadProgram(OSModuleHandle M,
     F.close();
   }
   // Load the selected image
+  if (!is_device_binary_type_supported(Context, Format))
+    throw feature_not_supported("Online compilation is not supported in this context");
   const RT::PiContext &Ctx = getRawSyclObjImpl(Context)->getHandleRef();
   RT::PiProgram Res = nullptr;
   Res = Format == PI_DEVICE_BINARY_TYPE_SPIRV
@@ -382,6 +402,7 @@ RT::PiProgram ProgramManager::loadProgram(OSModuleHandle M,
   }
   return Res;
 }
+
 } // namespace detail
 } // namespace sycl
 } // namespace cl

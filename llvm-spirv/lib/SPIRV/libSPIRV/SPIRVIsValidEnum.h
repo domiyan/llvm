@@ -402,7 +402,7 @@ inline bool isValid(spv::Decoration V) {
   case DecorationMemoryINTEL:
   case DecorationNumbanksINTEL:
   case DecorationBankwidthINTEL:
-  case DecorationMaxconcurrencyINTEL:
+  case DecorationMaxPrivateCopiesINTEL:
   case DecorationSinglepumpINTEL:
   case DecorationDoublepumpINTEL:
     return true;
@@ -558,6 +558,8 @@ inline bool isValid(spv::Capability V) {
   case CapabilityPipeStorage:
   case CapabilityFPGAMemoryAttributesINTEL:
   case CapabilityFPGALoopControlsINTEL:
+  case CapabilityBlockingPipesINTEL:
+  case CapabilityUnstructuredLoopControlsINTEL:
     return true;
   default:
     return false;
@@ -817,6 +819,8 @@ inline bool isValid(spv::Op V) {
   case OpGroupSMax:
   case OpReadPipe:
   case OpWritePipe:
+  case OpReadPipeBlockingINTEL:
+  case OpWritePipeBlockingINTEL:
   case OpReservedReadPipe:
   case OpReservedWritePipe:
   case OpReserveReadPipePackets:
@@ -999,6 +1003,8 @@ inline bool isValid(spv::Op V) {
   case OpSubgroupAvcSicGetPackedSkcLumaCountThresholdINTEL:
   case OpSubgroupAvcSicGetPackedSkcLumaSumThresholdINTEL:
   case OpSubgroupAvcSicGetInterRawSadsINTEL:
+  case OpFPGARegINTEL:
+  case OpLoopControlINTEL:
     return true;
   default:
     return false;
