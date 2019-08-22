@@ -79,7 +79,7 @@ static std::string accessModeToString(access::mode Mode) {
 
 void EventCompletionClbk(RT::PiEvent, pi_int32, void *data) {
   // TODO: Handle return values. Store errors to async handler.
-  PI_CALL(RT::piEventSetStatus(pi::pi_cast<RT::PiEvent>(data), CL_COMPLETE));
+  PI_CALL(RT::piEventSetStatus(pi::cast<RT::PiEvent>(data), CL_COMPLETE));
 }
 
 // Method prepares PI event's from list sycl::event's
@@ -171,7 +171,7 @@ cl_int AllocaSubBufCommand::enqueueImp() {
       Command::prepareEvents(detail::getSyclObjImpl(MQueue->get_context()));
   RT::PiEvent &Event = MEvent->getHandleRef();
   MMemAllocation = MemoryManager::createSubBuffer(
-      pi::pi_cast<RT::PiMem>(MParentAlloca->getMemAllocation()), MReq.MElemSize,
+      pi::cast<RT::PiMem>(MParentAlloca->getMemAllocation()), MReq.MElemSize,
       MReq.MOffset, MReq.MAccessRange, std::move(RawEvents), Event);
   return CL_SUCCESS;
 }
@@ -660,10 +660,12 @@ cl_int ExecCGCommand::enqueueImp() {
       case kernel_param_kind_t::kind_pointer:  {
         // TODO: Change to PI
         usesUSM = true;
+        std::shared_ptr<usm::USMDispatcher> USMDispatch =
+            getSyclObjImpl(Context)->getUSMDispatch();
         auto PtrToPtr = reinterpret_cast<intptr_t*>(Arg.MPtr);
         auto DerefPtr = reinterpret_cast<void*>(*PtrToPtr);
-        auto theKernel = pi::pi_cast<cl_kernel>(Kernel);
-        CHECK_OCL_CODE(clSetKernelArgMemPointerINTEL(theKernel, Arg.MIndex, DerefPtr));
+        pi::cast<RT::PiResult>(
+            USMDispatch->setKernelArgMemPointer(Kernel, Arg.MIndex, DerefPtr));
         break;
       }
       default:
@@ -675,38 +677,10 @@ cl_int ExecCGCommand::enqueueImp() {
                            detail::getSyclObjImpl(
                                MQueue->get_device())->getHandleRef());
 
-    // TODO: Replace CL with PI
-    auto clusm = GetCLUSM();
-    if (usesUSM && clusm) {
-      cl_bool t = CL_TRUE;
-      auto theKernel = pi::pi_cast<cl_kernel>(Kernel);
-      // Enable USM Indirect Access for Kernels
-      if (clusm->useCLUSM()) {
-        CHECK_OCL_CODE(clusm->setKernelExecInfo(
-            theKernel, CL_KERNEL_EXEC_INFO_INDIRECT_HOST_ACCESS_INTEL,
-            sizeof(cl_bool), &t));
-        CHECK_OCL_CODE(clusm->setKernelExecInfo(
-            theKernel, CL_KERNEL_EXEC_INFO_INDIRECT_DEVICE_ACCESS_INTEL,
-            sizeof(cl_bool), &t));
-        CHECK_OCL_CODE(clusm->setKernelExecInfo(
-            theKernel, CL_KERNEL_EXEC_INFO_INDIRECT_SHARED_ACCESS_INTEL,
-            sizeof(cl_bool), &t));
-
-        // This passes all the allocations we've tracked as SVM Pointers
-        CHECK_OCL_CODE(clusm->setKernelIndirectUSMExecInfo(
-            pi::pi_cast<cl_command_queue>(MQueue->getHandleRef()), theKernel));
-      } else if (clusm->isInitialized()) {
-        // Sanity check that nothing went wrong setting up clusm
-        CHECK_OCL_CODE(clSetKernelExecInfo(
-            theKernel, CL_KERNEL_EXEC_INFO_INDIRECT_HOST_ACCESS_INTEL,
-            sizeof(cl_bool), &t));
-        CHECK_OCL_CODE(clSetKernelExecInfo(
-            theKernel, CL_KERNEL_EXEC_INFO_INDIRECT_DEVICE_ACCESS_INTEL,
-            sizeof(cl_bool), &t));
-        CHECK_OCL_CODE(clSetKernelExecInfo(
-            theKernel, CL_KERNEL_EXEC_INFO_INDIRECT_SHARED_ACCESS_INTEL,
-            sizeof(cl_bool), &t));
-      }
+    if (usesUSM) {
+      std::shared_ptr<usm::USMDispatcher> USMDispatch =
+        getSyclObjImpl(Context)->getUSMDispatch();
+      USMDispatch->setKernelIndirectAccess(Kernel, MQueue->getHandleRef());
     }
 
     PI_CALL(RT::piEnqueueKernelLaunch(

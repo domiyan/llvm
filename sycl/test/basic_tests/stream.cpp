@@ -101,11 +101,23 @@ int main() {
         Out << -33.4f << sm::endl;
         Out << -5.2 << sm::endl;
         Out << 0.0003 << sm::endl;
+        Out << -1.0 / 0.0 << sm::endl;
+        Out << 1.0 / 0.0 << sm::endl;
+        Out << cl::sycl::sqrt(-1.0) << sm::endl;
+        Out << -1.0f / 0.0f << sm::endl;
+        Out << 1.0f / 0.0f << sm::endl;
+        Out << sqrt(-1.0f) << sm::endl;
 // CHECK-NEXT: 33.4
 // CHECK-NEXT: 5.2
 // CHECK-NEXT: -33.4
 // CHECK-NEXT: -5.2
 // CHECK-NEXT: 0.0003
+// CHECK-NEXT: -inf
+// CHECK-NEXT: inf
+// CHECK-NEXT: nan
+// CHECK-NEXT: -inf
+// CHECK-NEXT: inf
+// CHECK-NEXT: nan
 
         // Manipulators for integral types
         Out << sm::dec << 0213 << sm::endl;
@@ -155,6 +167,9 @@ int main() {
         Out << ConstPtr << sm::endl;
         auto multiPtr = private_ptr<int>(Ptr);
         Out << multiPtr << sm::endl;
+// CHECK-NEXT: 0x{{[0-9a-fA-F]*$}}
+// CHECK-NEXT: 0x{{[0-9a-fA-F]*$}}
+// CHECK-NEXT: 0x{{[0-9a-fA-F]*$}}
 
         // Vectors
         vec<int, 1> f1(545);
@@ -168,7 +183,7 @@ int main() {
         Out << sm::dec << f4 << sm::endl;
         vec<float, 4> f5(542.3f, 645.3f, 771.6f, 1024.2f);
         Out << f5 << sm::endl;
-// CHECK: 545
+// CHECK-NEXT: 545
 // CHECK-NEXT: 545, 645
 // CHECK-NEXT: 545, 645, 771
 // CHECK-NEXT: 0x84675, 0x285, 0x303, 0x400

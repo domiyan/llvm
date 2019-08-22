@@ -21,7 +21,7 @@
 // CHK-FPGA-LINK: clang-offload-bundler{{.*}} "-type=o" "-targets=fpga-fpga_aocr-intel-{{.*}}-sycldevice" "-inputs=[[INPUT]]" "-check-section"
 // CHK-FPGA-LINK: clang-offload-bundler{{.*}} "-type=o" "-targets=host-x86_64-unknown-linux-gnu,sycl-spir64_fpga-unknown-{{.*}}-sycldevice" "-inputs=[[INPUT]]" "-outputs=[[OUTPUT1:.+\.o]],[[OUTPUT2:.+\.o]]" "-unbundle"
 // CHK-FPGA-LINK: llvm-link{{.*}} "[[OUTPUT2]]" "-o" "[[OUTPUT3:.+\.bc]]"
-// CHK-FPGA-LINK: llvm-spirv{{.*}} "-spirv-no-deref-attr" "-o" "[[OUTPUT4:.+\.spv]]" "[[OUTPUT3]]"
+// CHK-FPGA-LINK: llvm-spirv{{.*}} "-spirv-max-version=1.0" "-spirv-ext=+all" "-o" "[[OUTPUT4:.+\.spv]]" "[[OUTPUT3]]"
 // CHK-FPGA-EARLY: aoc{{.*}} "-o" "[[OUTPUT5:.+\.aocr]]" "[[OUTPUT4]]" "-sycl" "-rtl"
 // CHK-FPGA-IMAGE: aoc{{.*}} "-o" "[[OUTPUT5:.+\.aocx]]" "[[OUTPUT4]]" "-sycl"
 // CHK-FPGA-LINK: ld{{.*}} "-r" "[[INPUT]]" "-o" "[[OUTPUT6:.+\.o]]"
@@ -43,6 +43,12 @@
 // CHK-FPGA-LINK-PHASES: 5: linker, {4}, object, (device-sycl)
 // CHK-FPGA-LINK-PHASES: 6: clang-offload-bundler, {3, 5}, object, (device-sycl)
 // CHK-FPGA-LINK-PHASES: 7: offload, "device-sycl (spir64_fpga-unknown-{{.*}}-sycldevice)" {6}, object
+
+// -fintelfpga -reuse-exe tests
+// RUN: %clang++ -### -fsycl -fintelfpga %s -reuse-exe=does_not_exist 2>&1 \
+// RUN:  | FileCheck -check-prefixes=CHK-FPGA-REUSE-EXE %s
+// CHK-FPGA-REUSE-EXE: warning: -reuse-exe file 'does_not_exist' not found; ignored
+//
 
 // TODO: SYCL specific fail - analyze and enable
 // XFAIL: windows-msvc
